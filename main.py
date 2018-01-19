@@ -1,6 +1,5 @@
 #! /usr/bin/env python
 #
-#	Sumeta (Mo) Boonchamoi
 #	Create date 2017/10/15
 #
 
