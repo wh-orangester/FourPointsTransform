@@ -19,20 +19,22 @@ import numpy as np
 ######################################################
 #	Globel Member
 
+Epsilon = 1e-8
+
 ######################################################
 #	Helper Function
 
 def computeFourPointTransformMatrix( P00, P10, P11, P01 ):
 	''' This function will create four-point transform matrix to
-		transform 1-by-1 square into quadrilateral
-		INPUTS : 4 point as numpy array
-		OUTPUT : four-point transform 4-by-4 matrix as numpy array
+	    transform 1-by-1 square into quadrilateral
+	    INPUTS : 4 point as numpy array
+	    OUTPUT : four-point transform 4-by-4 matrix as numpy matrix
 
-		WARNING - If you want to use P00 as reference point of transform,
-		          do translate all point so that P00 is (0,0)
+	    WARNING - If you want to use P00 as reference point of transform,
+	              do translate all point so that P00 is (0,0)
 
-		Reference : https://en.wikipedia.org/wiki/Transformation_matrix#Perspective_projection
-		Reference Image : https://en.wikipedia.org/wiki/Transformation_matrix#/media/File:Perspective_transformation_matrix_2D.svg
+	    Reference : https://en.wikipedia.org/wiki/Transformation_matrix#Perspective_projection
+	    Reference Image : https://en.wikipedia.org/wiki/Transformation_matrix#/media/File:Perspective_transformation_matrix_2D.svg
 	'''
 
 	#   From the reference image if we found g and h,
@@ -83,25 +85,33 @@ def computeFourPointTransformMatrix( P00, P10, P11, P01 ):
 	#   arrange into matrix:
 	#       [[t0_x,t1_x],[t0_y,t1_y]] * [[g],[h]] = [[t2_x],[t2_y]]
 	#       [[g],[h]] = [[t0_x,t1_x],[t0_y,t1_y]]^-1 * [[t2_x],[t2_y]]
+	#
+	#	in case, if you need exact formulae for g and h, here is what inverted
+	#       matrix should look like:
+	#       [[t0_x,t1_x],[t0_y,t1_y]]^-1
+	#           = ( 1/( t0_x*t1_y - t1_x*t0_y ) ) * [[t1_y,-t1_x],[-t0_y,t0_x]]
+	#   so:
+	#       g = ( t1_y*t2_x - t1_x*t2_y ) / ( t0_x*t1_y - t1_x*t0_y )
+	#       h = ( -t0_y*t2_x + t0_x*t2_y ) / ( t0_x*t1_y - t1_x*t0_y )
 
 	#	try to compute for g and h
 	try:
 		result = np.matrix( [ [ t0[0], t1[0] ], [ t0[1], t1[1] ] ] ).I * np.matrix( [ [ t2[0], t2[1] ] ] ).T
 	except np.linalg.LinAlgError:
-		#	NOTES - this exception caused by trying to invert non-invertible matrix
-		#			this will occur when eq.15 and eq.16 is not independent
-		#			(eq.15 can be multiply by some constant to get eq.16)
-		#			Such a case happen when both section P11-P10 and P11-P01
-		#			are aligned as single line
-		print "Cannot solve for because P00-P01 and P00-P10 are parallel"
+		#   NOTES - this exception caused by trying to invert non-invertible matrix
+		#           this will occur when eq.15 and eq.16 is not independent
+		#           (eq.15 can be multiply by some constant to get eq.16)
+		#           Such a case happen when both section P11-P10 and P11-P01
+		#           are aligned as single line
+		raise ValueError( 'Cannot solve for g and h because P11-P01 and P11-P10 are parallel' )
 
 	#   destructure result vector into g and h
 	g, h = [ result[i,0] for i in (0,1) ]
 
 	#	assert that g, h stay in valid domain
-	assert( g != -1 )
-	assert( h != -1 )
-	assert( g + h != -1)
+	assert( abs( g - 1 ) > Epsilon )
+	assert( abs( h - 1 ) > Epsilon )
+	assert( abs( g + h - 1 ) > Epsilon )
 
 	#
 	#   The following section will compute parallelogram's points
@@ -127,10 +137,10 @@ def computeFourPointTransformMatrix( P00, P10, P11, P01 ):
 
 	#   assert that the given parallelogram points
 	#       really form  aparallelogram by check parallelity of 2 opposite segment pairs
-	assert( P01_prime[0] - P00_prime[0] - P11_prime[0] + P10_prime[0] <= 1e-6 )
-	assert( P01_prime[1] - P00_prime[1] - P11_prime[1] + P10_prime[1] <= 1e-6 )
-	assert( P10_prime[0] - P00_prime[0] - P11_prime[0] + P01_prime[0] <= 1e-6 )
-	assert( P10_prime[1] - P00_prime[1] - P11_prime[1] + P01_prime[1] <= 1e-6 )
+	assert( P01_prime[0] - P00_prime[0] - P11_prime[0] + P10_prime[0] < Epsilon )
+	assert( P01_prime[1] - P00_prime[1] - P11_prime[1] + P10_prime[1] < Epsilon )
+	assert( P10_prime[0] - P00_prime[0] - P11_prime[0] + P01_prime[0] < Epsilon )
+	assert( P10_prime[1] - P00_prime[1] - P11_prime[1] + P01_prime[1] < Epsilon )
 
 	#
 	#   The following section compute for a, b, c, d, e, f
@@ -138,12 +148,9 @@ def computeFourPointTransformMatrix( P00, P10, P11, P01 ):
 	#       four-point transform and return
 
 	#   compute a, b, c, d, e, f
-	a = P10_prime[0] - P00_prime[0]
-	b = P01_prime[0] - P00_prime[0]
-	c = P00_prime[0]
-	d = P10_prime[1] - P00_prime[1]
-	e = P01_prime[1] - P00_prime[1]
-	f = P00_prime[1]
+	a, d = P10_prime - P00_prime
+	b, e = P01_prime - P00_prime
+	c, f = P00_prime
 
 	#   return
 	return np.matrix( [
